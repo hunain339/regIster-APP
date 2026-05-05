@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registration Cancelled — {{ event.title }}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    table { border-collapse: collapse; }
+    a { color: #2563eb; text-decoration: none; }
+
+    .wrapper { width: 100%; background-color: #f3f4f6; padding: 32px 16px; }
+    .container { max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+    .header { background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); padding: 40px 40px 32px; text-align: center; }
+    .header-icon { width: 56px; height: 56px; background: rgba(255,255,255,0.15); border-radius: 14px; margin: 0 auto 16px; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; }
+    .header p { margin: 6px 0 0; color: rgba(255,255,255,0.8); font-size: 14px; }
+
+    /* Cancel banner */
+    .cancel-banner { background-color: #fef2f2; border-top: 3px solid #ef4444; padding: 20px 40px; text-align: center; }
+    .cancel-banner p { margin: 0; color: #991b1b; font-size: 15px; font-weight: 600; }
+
+    .body { padding: 32px 40px; }
+    .greeting { font-size: 16px; color: #374151; margin: 0 0 24px; line-height: 1.6; }
+
+    /* Summary card */
+    .summary-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 28px; }
+    .summary-card h2 { margin: 0 0 4px; color: #374151; font-size: 17px; font-weight: 700; }
+    .summary-card .cancelled-label { display: inline-block; margin-bottom: 16px; background-color: #fee2e2; color: #991b1b; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }
+    .detail-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .detail-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .detail-label { color: #6b7280; }
+    .detail-value { color: #111827; font-weight: 500; }
+
+    /* Re-register note */
+    .info-note { background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 20px; margin-bottom: 28px; font-size: 13px; color: #1e40af; line-height: 1.5; }
+    .info-note strong { color: #1e3a8a; }
+
+    /* CTA */
+    .cta-wrap { text-align: center; margin-bottom: 32px; }
+    .cta-btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; font-size: 15px; font-weight: 600; padding: 14px 32px; border-radius: 10px; text-decoration: none; }
+
+    .footer { border-top: 1px solid #e5e7eb; padding: 24px 40px; text-align: center; }
+    .footer p { margin: 0 0 6px; color: #9ca3af; font-size: 12px; line-height: 1.6; }
+    .footer a { color: #6b7280; text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-icon" style="display:flex;align-items:center;justify-content:center;">
+        <svg width="28" height="28" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      </div>
+      <h1>EventHub</h1>
+      <p>Your event registration platform</p>
+    </div>
+
+    <!-- Cancel banner -->
+    <div class="cancel-banner">
+      <p>&#10005; &nbsp; Your registration has been cancelled</p>
+    </div>
+
+    <!-- Body -->
+    <div class="body">
+
+      <p class="greeting">
+        Hi <strong>{{ registration.name }}</strong>,<br><br>
+        We've processed your cancellation for <strong>{{ event.title }}</strong>.
+        We're sorry to see you go — your spot has been released for others to register.
+      </p>
+
+      <!-- Cancelled registration summary -->
+      <div class="summary-card">
+        <h2>{{ event.title }}</h2>
+        <span class="cancelled-label">Cancelled</span>
+        <div class="detail-row">
+          <span class="detail-label">Registration #</span>
+          <span class="detail-value">#{{ registration.pk }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Name</span>
+          <span class="detail-value">{{ registration.name }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Email</span>
+          <span class="detail-value">{{ registration.email }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Event date</span>
+          <span class="detail-value">{{ event.date|date:"l, F j, Y \a\t g:i A" }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Location</span>
+          <span class="detail-value">{{ event.location }}</span>
+        </div>
+      </div>
+
+      <!-- Re-register hint -->
+      <div class="info-note">
+        <strong>Changed your mind?</strong> If you'd like to re-register, head back to the event page.
+        Note that capacity may be limited — spots are first come, first served.
+      </div>
+
+      <!-- CTA: browse events -->
+      <div class="cta-wrap">
+        <a href="{{ browse_url }}" class="cta-btn">Browse More Events &rarr;</a>
+      </div>
+
+      <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0;">
+        If you didn't request this cancellation, please
+        <a href="{{ site_url }}" style="color:#2563eb;">contact us</a> immediately.
+      </p>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p><strong style="color:#374151;">EventHub</strong></p>
+      <p>This is an automated notification. Please do not reply directly.</p>
+      <p><a href="{{ browse_url }}">Browse events</a> &nbsp;&bull;&nbsp; <a href="{{ event_url }}">View this event</a></p>
+      <p style="margin-top:12px;">&#169; {{ year }} EventHub. All rights reserved.</p>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
