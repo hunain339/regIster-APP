@@ -1,0 +1,29 @@
+EventHub — Registration Cancelled
+===================================
+
+Hi {{ registration.name }},
+
+Your registration for {{ event.title }} has been cancelled.
+
+CANCELLED REGISTRATION SUMMARY
+-------------------------------
+Registration #:  #{{ registration.pk }}
+Name:            {{ registration.name }}
+Email:           {{ registration.email }}
+Event:           {{ event.title }}
+Date:            {{ event.date|date:"l, F j, Y \a\t g:i A T" }}
+Location:        {{ event.location }}
+
+Your spot has been released. If capacity permits, you may re-register
+at any time on the event page:
+{{ event_url }}
+
+Browse more events:
+{{ browse_url }}
+
+---
+If you didn't request this cancellation, please contact us at:
+{{ site_url }}
+
+© {{ year }} EventHub
+{{ site_url }}
