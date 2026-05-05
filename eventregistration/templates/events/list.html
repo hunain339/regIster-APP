@@ -1,0 +1,326 @@
+{% extends 'base.html' %}
+
+{% block title %}Browse Events — EventHub{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+  <!-- Page header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Upcoming Events</h1>
+      <p class="text-gray-500 mt-1">Find and register for events near you.</p>
+    </div>
+    <!-- Search bar -->
+    <div class="relative w-full sm:w-80">
+      <input id="search-input" type="text" placeholder="Search events…"
+        class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm
+               focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
+               bg-white shadow-sm transition-all" />
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Filters row -->
+  <div class="flex flex-wrap gap-3">
+    <button onclick="setFilter('all')" data-filter="all"
+      class="filter-btn active px-4 py-2 rounded-full text-sm font-medium transition-all border">
+      All Events
+    </button>
+    <button onclick="setFilter('upcoming')" data-filter="upcoming"
+      class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-all border">
+      Upcoming Only
+    </button>
+  </div>
+
+  <!-- Results count -->
+  <p id="results-count" class="text-sm text-gray-500 hidden">
+    <span id="count-value"></span> event(s) found
+  </p>
+
+  <!-- Event cards grid -->
+  <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Cards injected by JS -->
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden text-center py-20">
+    <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+    <h3 class="text-lg font-semibold text-gray-700">No events found</h3>
+    <p class="text-gray-400 mt-1">Try adjusting your search or check back later.</p>
+  </div>
+
+  <!-- Loading spinner (initial load) -->
+  <div id="initial-loader" class="flex justify-center py-20">
+    <div class="spinner w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+  </div>
+
+  <!-- Infinite scroll sentinel -->
+  <div id="load-more-sentinel" class="flex justify-center py-6 hidden">
+    <div class="spinner w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+  </div>
+
+  <!-- End of results message -->
+  <p id="end-of-results" class="text-center text-sm text-gray-400 py-4 hidden">
+    You've seen all events.
+  </p>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* =========================================================
+   Event List Page — Infinite Scroll with Vanilla JS fetch
+   ========================================================= */
+
+const EVENTS_API = '/api/events/';
+
+let currentPage = 1;
+let nextUrl     = null;
+let isLoading   = false;
+let currentFilter = 'all';
+let searchQuery   = '';
+let debounceTimer = null;
+
+// ------------------------------------
+// Fetch events from DRF paginated API
+// ------------------------------------
+async function fetchEvents(url) {
+  if (isLoading) return;
+  isLoading = true;
+  showSentinel(true);
+
+  try {
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    nextUrl = data.next;
+
+    renderCards(data.results, currentPage === 1);
+
+    // Update count on first page
+    if (currentPage === 1) {
+      const countEl = document.getElementById('count-value');
+      const countWrap = document.getElementById('results-count');
+      if (data.count !== undefined) {
+        countEl.textContent = data.count;
+        countWrap.classList.remove('hidden');
+      }
+      document.getElementById('initial-loader').classList.add('hidden');
+    }
+
+    currentPage++;
+
+    if (!nextUrl) {
+      showSentinel(false);
+      if (currentPage > 2) {
+        document.getElementById('end-of-results').classList.remove('hidden');
+      }
+    }
+
+    // Show / hide empty state
+    const grid = document.getElementById('events-grid');
+    const isEmpty = grid.children.length === 0;
+    document.getElementById('empty-state').classList.toggle('hidden', !isEmpty);
+
+  } catch (err) {
+    console.error('Failed to load events:', err);
+    showToast('Failed to load events. Please refresh.', 'error');
+    document.getElementById('initial-loader').classList.add('hidden');
+  } finally {
+    isLoading = false;
+  }
+}
+
+// ------------------------------------
+// Build one event card element
+// ------------------------------------
+function buildCard(event) {
+  const isPast = event.is_past;
+  const isFull = event.is_full;
+  const spotsLeft = event.spots_remaining;
+
+  const statusBadge = isPast
+    ? `<span class="badge-past">Past</span>`
+    : isFull
+      ? `<span class="badge-full">Sold Out</span>`
+      : spotsLeft <= 5
+        ? `<span class="badge-few">${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left</span>`
+        : `<span class="badge-open">${spotsLeft} spots left</span>`;
+
+  const dateStr = formatDate(event.date);
+
+  return `
+  <article class="event-card group bg-white rounded-2xl shadow-sm border border-gray-100
+                  hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden
+                  flex flex-col ${isPast ? 'opacity-75' : ''}">
+
+    <!-- Colour strip -->
+    <div class="h-1.5 ${isPast ? 'bg-gray-300' : 'bg-gradient-to-r from-brand-500 to-brand-700'}"></div>
+
+    <div class="p-5 flex flex-col flex-1 gap-3">
+
+      <!-- Title + badge -->
+      <div class="flex items-start justify-between gap-2">
+        <h2 class="font-semibold text-gray-900 text-base leading-snug group-hover:text-brand-700 transition-colors line-clamp-2">
+          ${escapeHtml(event.title)}
+        </h2>
+        ${statusBadge}
+      </div>
+
+      <!-- Description -->
+      <p class="text-sm text-gray-500 line-clamp-2 flex-1">${escapeHtml(event.description)}</p>
+
+      <!-- Meta -->
+      <div class="space-y-1.5 text-sm text-gray-600">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-brand-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <span>${dateStr}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-brand-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <span class="truncate">${escapeHtml(event.location)}</span>
+        </div>
+      </div>
+
+      <!-- Capacity bar -->
+      <div>
+        <div class="flex justify-between text-xs text-gray-400 mb-1">
+          <span>${event.total_registrations} registered</span>
+          <span>of ${event.capacity}</span>
+        </div>
+        <div class="w-full bg-gray-100 rounded-full h-1.5">
+          <div class="h-1.5 rounded-full transition-all duration-500
+            ${isFull ? 'bg-red-500' : spotsLeft <= 5 ? 'bg-amber-500' : 'bg-brand-500'}"
+            style="width: ${Math.min((event.total_registrations / event.capacity) * 100, 100)}%"></div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <a href="/events/${event.id}/"
+        class="mt-1 block text-center text-sm font-medium py-2.5 px-4 rounded-xl transition-all duration-200
+               ${isPast
+                 ? 'bg-gray-100 text-gray-500 cursor-default'
+                 : isFull
+                   ? 'bg-red-50 text-red-600 cursor-default'
+                   : 'bg-brand-600 hover:bg-brand-700 text-white shadow-sm hover:shadow-md'}">
+        ${isPast ? 'View Details' : isFull ? 'Fully Booked' : 'Register Now'}
+      </a>
+    </div>
+  </article>`;
+}
+
+// ------------------------------------
+// Render cards into the grid
+// ------------------------------------
+function renderCards(events, reset = false) {
+  const grid = document.getElementById('events-grid');
+  if (reset) grid.innerHTML = '';
+
+  events.forEach(ev => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = buildCard(ev);
+    grid.appendChild(tmp.firstElementChild);
+  });
+}
+
+// ------------------------------------
+// Filter buttons
+// ------------------------------------
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    const isActive = btn.dataset.filter === filter;
+    btn.classList.toggle('active', isActive);
+    btn.classList.toggle('bg-brand-600', isActive);
+    btn.classList.toggle('text-white', isActive);
+    btn.classList.toggle('border-brand-600', isActive);
+    btn.classList.toggle('text-gray-600', !isActive);
+    btn.classList.toggle('border-gray-300', !isActive);
+  });
+  reload();
+}
+
+// ------------------------------------
+// Build the first page URL
+// ------------------------------------
+function buildUrl() {
+  const params = new URLSearchParams();
+  if (searchQuery) params.set('search', searchQuery);
+  if (currentFilter === 'upcoming') params.set('upcoming', 'true');
+  return `${EVENTS_API}?${params}`;
+}
+
+// ------------------------------------
+// Reload from page 1
+// ------------------------------------
+function reload() {
+  currentPage = 1;
+  nextUrl = null;
+  document.getElementById('end-of-results').classList.add('hidden');
+  document.getElementById('results-count').classList.add('hidden');
+  document.getElementById('events-grid').innerHTML = '';
+  document.getElementById('initial-loader').classList.remove('hidden');
+  fetchEvents(buildUrl());
+}
+
+// ------------------------------------
+// Infinite scroll via IntersectionObserver
+// ------------------------------------
+const sentinel = document.getElementById('load-more-sentinel');
+const observer = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting && nextUrl && !isLoading) {
+    fetchEvents(nextUrl);
+  }
+}, { rootMargin: '200px' });
+observer.observe(sentinel);
+
+function showSentinel(show) {
+  sentinel.classList.toggle('hidden', !show);
+}
+
+// ------------------------------------
+// Search — debounced 400 ms
+// ------------------------------------
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    searchQuery = e.target.value.trim();
+    reload();
+  }, 400);
+});
+
+// ------------------------------------
+// Initialise filter buttons styling
+// ------------------------------------
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  if (btn.dataset.filter === 'all') {
+    btn.classList.add('bg-brand-600', 'text-white', 'border-brand-600');
+  } else {
+    btn.classList.add('text-gray-600', 'border-gray-300');
+  }
+});
+
+// ------------------------------------
+// Kick off first load
+// ------------------------------------
+reload();
+</script>
+{% endblock %}
