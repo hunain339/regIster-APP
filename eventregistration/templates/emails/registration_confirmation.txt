@@ -1,0 +1,32 @@
+EventHub — Registration Confirmed
+==================================
+
+Hi {{ registration.name }},
+
+You're officially registered for {{ event.title }}!
+
+EVENT DETAILS
+-------------
+Title:     {{ event.title }}
+Date:      {{ event.date|date:"l, F j, Y \a\t g:i A T" }}
+Location:  {{ event.location }}
+
+YOUR REGISTRATION
+-----------------
+Registration #:  #{{ registration.pk }}
+Name:            {{ registration.name }}
+Email:           {{ registration.email }}
+{% if registration.phone %}Phone:           {{ registration.phone }}
+{% endif %}Registered on:   {{ registration.registered_at|date:"N j, Y \a\t g:i A" }}
+
+View the event page here:
+{{ event_url }}
+
+---
+Need to cancel? Visit My Registrations at:
+{{ my_registrations_url }}
+
+If you didn't register for this event, please ignore this email.
+
+© {{ year }} EventHub
+{{ site_url }}
