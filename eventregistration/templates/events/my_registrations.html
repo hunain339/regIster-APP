@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+
+{% block title %}My Registrations — EventHub{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+  <!-- Header -->
+  <div>
+    <h1 class="text-3xl font-bold text-gray-900">My Registrations</h1>
+    <p class="text-gray-500 mt-1">Manage your event sign-ups.</p>
+  </div>
+
+  <!-- Tabs: Active / Cancelled -->
+  <div class="flex gap-2 border-b border-gray-200">
+    <button onclick="setTab('active')" id="tab-active"
+      class="tab-btn px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
+      Active
+    </button>
+    <button onclick="setTab('cancelled')" id="tab-cancelled"
+      class="tab-btn px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
+      Cancelled
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div id="loader" class="flex justify-center py-16">
+    <div class="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+  </div>
+
+  <!-- Registration list -->
+  <div id="reg-list" class="hidden space-y-4"></div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden text-center py-20">
+    <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+    </svg>
+    <h3 class="text-lg font-semibold text-gray-700" id="empty-title">No registrations yet</h3>
+    <p class="text-gray-400 mt-1" id="empty-subtitle">Browse events and sign up for something exciting!</p>
+    <a href="/events/" class="mt-5 inline-block bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors">
+      Browse Events
+    </a>
+  </div>
+
+  <!-- Cancel confirm modal -->
+  <div id="cancel-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Cancel Registration?</h3>
+      <p class="text-gray-500 text-sm mb-6">
+        Are you sure you want to cancel your registration for
+        <strong id="modal-event-title"></strong>? This action cannot be undone.
+      </p>
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeCancelModal()"
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
+          Keep Registration
+        </button>
+        <button id="confirm-cancel-btn" onclick="confirmCancel()"
+          class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors">
+          Yes, Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allRegistrations = [];
+let currentTab = 'active';
+let selectedRegId = null;
+
+function getCsrf() {
+  const m = document.cookie.match(/csrftoken=([^;]+)/);
+  return m ? m[1] : '';
+}
+
+// ------------------------------------
+// Load registrations from API
+// ------------------------------------
+async function loadRegistrations() {
+  try {
+    const res = await fetch('/api/registrations/', {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    // DRF returns paginated data with "results" key
+    allRegistrations = data.results || data;
+
+    render();
+  } catch(err) {
+    document.getElementById('loader').classList.add('hidden');
+    showToast('Failed to load registrations.', 'error');
+  }
+}
+
+// ------------------------------------
+// Render filtered registrations
+// ------------------------------------
+function render() {
+  document.getElementById('loader').classList.add('hidden');
+
+  const filtered = allRegistrations.filter(r =>
+    currentTab === 'active' ? !r.is_cancelled : r.is_cancelled
+  );
+
+  const list = document.getElementById('reg-list');
+  list.innerHTML = '';
+
+  if (filtered.length === 0) {
+    list.classList.add('hidden');
+    const emptyTitle = document.getElementById('empty-title');
+    const emptySub = document.getElementById('empty-subtitle');
+    if (currentTab === 'cancelled') {
+      emptyTitle.textContent = 'No cancelled registrations';
+      emptySub.textContent = 'Your cancellations will appear here.';
+    } else {
+      emptyTitle.textContent = 'No active registrations';
+      emptySub.textContent = 'Browse events and sign up for something exciting!';
+    }
+    document.getElementById('empty-state').classList.remove('hidden');
+    return;
+  }
+
+  document.getElementById('empty-state').classList.add('hidden');
+
+  filtered.forEach(reg => {
+    const isPast = new Date(reg.event_date) < new Date();
+    list.innerHTML += `
+    <div id="reg-card-${reg.id}"
+      class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5
+             flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4
+             ${reg.is_cancelled ? 'opacity-60' : ''}
+             transition-all duration-300">
+
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2 mb-1">
+          <h3 class="font-semibold text-gray-900 truncate">${escapeHtml(reg.event_title)}</h3>
+          ${reg.is_cancelled
+            ? '<span class="badge-past text-xs">Cancelled</span>'
+            : isPast
+              ? '<span class="badge-past text-xs">Past</span>'
+              : '<span class="badge-open text-xs">Active</span>'}
+        </div>
+
+        <div class="space-y-1 text-sm text-gray-500">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-brand-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            ${formatDate(reg.event_date)}
+          </div>
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-brand-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            ${escapeHtml(reg.event_location)}
+          </div>
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-brand-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+            Registered as <strong>${escapeHtml(reg.name)}</strong> — ${escapeHtml(reg.email)}
+          </div>
+          <p class="text-xs text-gray-400">Registered on ${formatDate(reg.registered_at)}</p>
+        </div>
+      </div>
+
+      <div class="flex gap-2 shrink-0">
+        <a href="/events/${reg.event}/" 
+          class="px-3 py-2 text-sm font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 rounded-xl transition-colors">
+          View Event
+        </a>
+        ${!reg.is_cancelled && !isPast
+          ? `<button onclick="openCancelModal(${reg.id}, '${escapeHtml(reg.event_title).replace(/'/g, "\\'")}')"
+              class="px-3 py-2 text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 rounded-xl transition-colors">
+              Cancel
+            </button>`
+          : ''}
+      </div>
+    </div>`;
+  });
+
+  list.classList.remove('hidden');
+}
+
+// ------------------------------------
+// Tab switching
+// ------------------------------------
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const isActive = btn.id === `tab-${tab}`;
+    btn.classList.toggle('border-brand-600', isActive);
+    btn.classList.toggle('text-brand-700', isActive);
+    btn.classList.toggle('border-transparent', !isActive);
+    btn.classList.toggle('text-gray-500', !isActive);
+  });
+  render();
+}
+
+// ------------------------------------
+// Cancel modal
+// ------------------------------------
+function openCancelModal(regId, title) {
+  selectedRegId = regId;
+  document.getElementById('modal-event-title').textContent = title;
+  document.getElementById('cancel-modal').classList.remove('hidden');
+}
+
+function closeCancelModal() {
+  selectedRegId = null;
+  document.getElementById('cancel-modal').classList.add('hidden');
+}
+
+async function confirmCancel() {
+  if (!selectedRegId) return;
+  const btn = document.getElementById('confirm-cancel-btn');
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+
+  try {
+    const res = await fetch(`/api/registrations/${selectedRegId}/`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRFToken': getCsrf(),
+        'Accept': 'application/json',
+      }
+    });
+
+    if (res.ok || res.status === 200) {
+      // Update local state
+      const reg = allRegistrations.find(r => r.id === selectedRegId);
+      if (reg) reg.is_cancelled = true;
+
+      closeCancelModal();
+      render();
+      showToast('Registration cancelled successfully.', 'success');
+    } else {
+      const data = await res.json();
+      showToast(data.detail || 'Failed to cancel registration.', 'error');
+    }
+  } catch(err) {
+    showToast('Network error. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Yes, Cancel';
+  }
+}
+
+// Close modal on backdrop click
+document.getElementById('cancel-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeCancelModal();
+});
+
+// ------------------------------------
+// Init tab styling
+// ------------------------------------
+setTab('active');
+loadRegistrations();
+</script>
+{% endblock %}
